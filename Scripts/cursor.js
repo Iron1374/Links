@@ -21,16 +21,14 @@
       height: 18px;
       pointer-events: none;
       z-index: 9999;
-      transform: translate(-50%, -50%) rotate(0deg);
-      transition: transform 0.12s ease, opacity 0.2s ease;
+      transform: translate(-50%, -50%);
       mix-blend-mode: screen;
-      /* clear any old bg/shadow from inline CSS */
       background: none !important;
       box-shadow: none !important;
       border-radius: 0 !important;
+      /* NO opacity transition — prevents flicker on hover enter/leave */
     }
 
-    /* The star is drawn via clip-path on a pseudo */
     #cursor::before {
       content: '';
       position: absolute;
@@ -52,7 +50,7 @@
       transition: filter 0.2s ease, transform 0.2s ease;
     }
 
-    /* Slow idle spin */
+    /* Slow idle ghost spin */
     #cursor::after {
       content: '';
       position: absolute;
@@ -68,17 +66,15 @@
         46% 42%
       );
       background: rgba(167,139,250,0.18);
-      transform: scale(1.6) rotate(45deg);
       animation: starGhostSpin 8s linear infinite;
     }
-
     @keyframes starGhostSpin {
       from { transform: scale(1.6) rotate(0deg);   opacity: 0.18; }
       50%  { transform: scale(2.0) rotate(180deg); opacity: 0.06; }
       to   { transform: scale(1.6) rotate(360deg); opacity: 0.18; }
     }
 
-    /* Hover state — blooms */
+    /* Hover — bloom */
     #cursor.hovered::before {
       filter: drop-shadow(0 0 6px rgba(255,255,255,1))
               drop-shadow(0 0 14px rgba(196,181,253,1))
@@ -110,12 +106,11 @@
       pointer-events: none;
       z-index: 9998;
       transform: translate(-50%, -50%);
-      transition: width 0.25s ease, height 0.25s ease, opacity 0.2s ease;
-      /* clear old border from inline/CSS */
+      transition: width 0.25s ease, height 0.25s ease;
+      /* NO opacity transition — prevents flicker */
       border: none !important;
     }
 
-    /* Dashed orbit */
     #cursorRing::before {
       content: '';
       position: absolute;
@@ -127,7 +122,6 @@
       transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
 
-    /* Second ring offset — creates a double-orbit feel */
     #cursorRing::after {
       content: '';
       position: absolute;
@@ -142,7 +136,6 @@
     #cursorRing.hovered { width: 58px; height: 58px; }
     #cursorRing.hovered::before {
       border-color: rgba(196,181,253,0.7);
-      border-style: dashed;
       box-shadow: 0 0 16px rgba(167,139,250,0.35), 0 0 30px rgba(124,58,237,0.15);
       animation: ringRotateFast 2.2s linear infinite;
     }
@@ -159,12 +152,8 @@
       animation: ringRotateFast 1s linear infinite;
     }
 
-    @keyframes ringRotate {
-      to { transform: rotate(360deg); }
-    }
-    @keyframes ringRotateFast {
-      to { transform: rotate(360deg); }
-    }
+    @keyframes ringRotate     { to { transform: rotate(360deg); } }
+    @keyframes ringRotateFast { to { transform: rotate(360deg); } }
 
     /* ── Click burst particles ── */
     .cursor-burst {
@@ -182,8 +171,9 @@
   let mouseX = 0, mouseY = 0;
   let ringX  = 0, ringY  = 0;
   let ready  = false;
+  let hoverCount = 0;   // reference-count: how many interactive elements are currently entered
 
-  // Hide until first move
+  // Start hidden — shown on first mousemove only
   cursor.style.opacity = '0';
   ring.style.opacity   = '0';
 
@@ -192,6 +182,9 @@
     mouseX = e.clientX;
     mouseY = e.clientY;
 
+    cursor.style.left = mouseX + 'px';
+    cursor.style.top  = mouseY + 'px';
+
     if (!ready) {
       ringX = mouseX;
       ringY = mouseY;
@@ -199,11 +192,9 @@
       cursor.style.opacity = '1';
       ring.style.opacity   = '1';
     }
-
-    cursor.style.left = mouseX + 'px';
-    cursor.style.top  = mouseY + 'px';
   });
 
+  // Only hide when mouse actually leaves the browser window
   document.addEventListener('mouseleave', () => {
     cursor.style.opacity = '0';
     ring.style.opacity   = '0';
@@ -225,22 +216,26 @@
     ring.classList.remove('clicking');
   });
 
-  // ── Hover on interactive elements ──
+  // ── Hover — reference counted so leaving one element never hides the cursor ──
   function attach(el) {
     el.addEventListener('mouseenter', () => {
+      hoverCount++;
       cursor.classList.add('hovered');
       ring.classList.add('hovered');
     });
     el.addEventListener('mouseleave', () => {
-      cursor.classList.remove('hovered');
-      ring.classList.remove('hovered');
+      hoverCount = Math.max(0, hoverCount - 1);
+      if (hoverCount === 0) {
+        cursor.classList.remove('hovered');
+        ring.classList.remove('hovered');
+      }
     });
   }
 
   document.querySelectorAll('a, button, .planet, .link-item, .featured-card, .live-badge, [role="button"]')
     .forEach(attach);
 
-  // Auto-attach to dynamically added elements (planets built by main.js)
+  // Auto-attach to dynamically added elements (e.g. planets built by main.js)
   new MutationObserver(mutations => {
     mutations.forEach(m => {
       m.addedNodes.forEach(node => {
@@ -276,17 +271,15 @@
       const hue    = Math.random() > 0.5 ? '#c4b5fd' : '#a78bfa';
 
       Object.assign(p.style, {
-        left:       cx + 'px',
-        top:        cy + 'px',
-        width:      size + 'px',
-        height:     size + 'px',
-        background: hue,
-        boxShadow:  `0 0 6px ${hue}, 0 0 14px ${hue}`,
-        clipPath: isStar
-          ? 'polygon(50% 0%,54% 42%,100% 50%,54% 58%,50% 100%,46% 58%,0% 50%,46% 42%)'
-          : 'none',
+        left:         cx + 'px',
+        top:          cy + 'px',
+        width:        size + 'px',
+        height:       size + 'px',
+        background:   hue,
+        boxShadow:    `0 0 6px ${hue}, 0 0 14px ${hue}`,
+        clipPath:     isStar ? 'polygon(50% 0%,54% 42%,100% 50%,54% 58%,50% 100%,46% 58%,0% 50%,46% 42%)' : 'none',
         borderRadius: isStar ? '0' : '50%',
-        opacity: '1',
+        opacity:      '1',
       });
 
       document.body.appendChild(p);
